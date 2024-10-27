@@ -268,103 +268,135 @@ fun xmlOperations() {
 
 // Работа с ZIP архивами
 fun zipOperations() {
-    println("1. Создать ZIP архив и добавить файл")
-    println("2. Добавить файл в существующий ZIP архив")
-    println("3. Разархивировать файл")
-    println("4. Удалить ZIP архив и его файлы")
+    while (true) {
+        println("1. Создать ZIP архив и добавить файл")
+        println("2. Добавить файл в существующий ZIP архив")
+        println("3. Разархивировать файл")
+        println("4. Удалить ZIP архив и его файлы")
+        println("5. Выйти")
 
-    when (readLine()?.toIntOrNull()) {
-        1 -> {
-            println("Введите имя ZIP архива:")
-            val zipFilename = readLine()!! + ".zip"
-            val zipFile = File(zipFilename)
+        when (readLine()?.toIntOrNull()) {
+            1 -> createZipArchive()
+            2 -> addFileToExistingZip()
+            3 -> unzipFile()
+            4 -> deleteZipFile()
+            5 -> break
+            else -> println("Неверный выбор, попробуйте снова.")
+        }
+    }
+}
 
-            println("Введите имя файла для добавления в архив:")
-            val filename = readLine()!!
-            val file = File(filename)
+fun createZipArchive() {
+    println("Введите имя ZIP архива:")
+    val zipFilename = readLine()!! + ".zip"
+    val zipFile = File(zipFilename)
 
-            if (file.exists()) {
-                ZipOutputStream(BufferedOutputStream(FileOutputStream(zipFile))).use { zipOut ->
-                    val entry = ZipEntry(file.name)
-                    zipOut.putNextEntry(entry)
-                    file.inputStream().copyTo(zipOut)
+    println("Введите имя файла для добавления в архив:")
+    val filename = readLine()!!
+    val file = File(filename)
+
+    if (file.exists()) {
+        ZipOutputStream(BufferedOutputStream(FileOutputStream(zipFile))).use { zipOut ->
+            zipOut.putNextEntry(ZipEntry(file.name))
+            file.inputStream().use { input ->
+                input.copyTo(zipOut)
+            }
+            zipOut.closeEntry()
+        }
+        println("ZIP архив '$zipFilename' создан и файл '$filename' добавлен.")
+    } else {
+        println("Файл '$filename' не найден.")
+    }
+}
+
+fun addFileToExistingZip() {
+    println("Введите имя существующего ZIP архива:")
+    val zipFilename = readLine()!! + ".zip"
+    val zipFile = File(zipFilename)
+
+    if (!zipFile.exists()) {
+        println("Архив '$zipFilename' не найден.")
+        return
+    }
+
+    println("Введите имя файла для добавления в архив:")
+    val filename = readLine()!!
+    val file = File(filename)
+
+    if (file.exists()) {
+        val tempZipFile = File(zipFile.parent, "temp_${zipFile.name}")
+
+        ZipInputStream(BufferedInputStream(FileInputStream(zipFile))).use { zipIn ->
+            ZipOutputStream(BufferedOutputStream(FileOutputStream(tempZipFile))).use { zipOut ->
+                while (true) {
+                    val entry = zipIn.nextEntry ?: break
+                    zipOut.putNextEntry(ZipEntry(entry.name))
+                    zipIn.copyTo(zipOut)
+                    zipOut.closeEntry()
                 }
-                println("ZIP архив создан и файл добавлен.")
-            } else {
-                println("Файл не найден.")
+                zipOut.putNextEntry(ZipEntry(file.name))
+                file.inputStream().use { input ->
+                    input.copyTo(zipOut)
+                }
+                zipOut.closeEntry()
             }
         }
-        2 -> {
-            println("Введите имя существующего ZIP архива для добавления файла:")
-            val zipFilename = readLine()!! + ".zip"
-            val zipFile = File(zipFilename)
 
-            if (zipFile.exists()) {
-                println("Введите имя файла для добавления в архив:")
-                val filename = readLine()!!
-                val file = File(filename)
+        if (zipFile.delete()) {
+            tempZipFile.renameTo(zipFile)
+            println("Файл '$filename' добавлен в архив '$zipFilename'.")
+        } else {
+            println("Не удалось удалить старый архив.")
+        }
+    } else {
+        println("Файл '$filename' не найден.")
+    }
+}
 
-                if (file.exists()) {
-                    val tempZipFile = File("temp_$zipFilename")
-                    ZipInputStream(BufferedInputStream(FileInputStream(zipFile))).use { zipIn ->
-                        ZipOutputStream(BufferedOutputStream(FileOutputStream(tempZipFile))).use { zipOut ->
-                            while (true) {
-                                val entry = zipIn.nextEntry ?: break
-                                zipOut.putNextEntry(ZipEntry(entry.name))
-                                zipIn.copyTo(zipOut)
-                                zipOut.closeEntry()
-                            }
-                            zipOut.putNextEntry(ZipEntry(file.name))
-                            file.inputStream().copyTo(zipOut)
-                        }
-                    }
-                    zipFile.delete()
-                    tempZipFile.renameTo(zipFile)
-                    println("Файл добавлен в ZIP архив.")
-                } else {
-                    println("Файл для добавления не найден.")
+fun unzipFile() {
+    println("Введите имя ZIP архива для разархивирования:")
+    val zipFilename = readLine()!! + ".zip"
+    val zipFile = File(zipFilename)
+
+    if (!zipFile.exists()) {
+        println("Архив '$zipFilename' не найден.")
+        return
+    }
+
+    println("Введите имя директории для распаковки:")
+    val outputDir = File(readLine()!!)
+
+    if (!outputDir.exists()) {
+        outputDir.mkdirs()
+    }
+
+    ZipInputStream(BufferedInputStream(FileInputStream(zipFile))).use { zipIn ->
+        var entry: ZipEntry?
+        while (zipIn.nextEntry.also { entry = it } != null) {
+            entry?.let {
+                val outputFile = File(outputDir, it.name)
+                FileOutputStream(outputFile).use { output ->
+                    zipIn.copyTo(output)
                 }
-            } else {
-                println("ZIP архив не найден.")
+                println("Файл '${it.name}' разархивирован в '${outputFile.absolutePath}'.")
             }
         }
-        3 -> {
-            println("Введите имя ZIP архива для разархивирования:")
-            val zipFilename = readLine()!! + ".zip"
-            val zipFile = File(zipFilename)
+    }
+}
 
-            if (zipFile.exists()) {
-                ZipInputStream(BufferedInputStream(FileInputStream(zipFile))).use { zipIn ->
-                    while (true) {
-                        val entry = zipIn.nextEntry ?: break
-                        val outFile = File(entry.name)
-                        outFile.outputStream().use { fileOut -> zipIn.copyTo(fileOut) }
-                        println("Разархивирован файл: ${entry.name}")
-                    }
-                }
-            } else {
-                println("ZIP архив не найден.")
-            }
-        }
-        4 -> {
-            println("Введите имя ZIP архива для удаления:")
-            val zipFilename = readLine()!! + ".zip"
-            val zipFile = File(zipFilename)
+fun deleteZipFile() {
+    println("Введите имя ZIP архива для удаления:")
+    val zipFilename = readLine()!! + ".zip"
+    val zipFile = File(zipFilename)
 
-            if (zipFile.exists()) {
-                ZipInputStream(BufferedInputStream(FileInputStream(zipFile))).use { zipIn ->
-                    while (true) {
-                        val entry = zipIn.nextEntry ?: break
-                        File(entry.name).delete()
-                    }
-                }
-                zipFile.delete()
-                println("ZIP архив и его файлы удалены.")
-            } else {
-                println("Архив не найден.")
-            }
+    if (zipFile.exists()) {
+        if (zipFile.delete()) {
+            println("ZIP архив '$zipFilename' удалён.")
+        } else {
+            println("Не удалось удалить ZIP архив '$zipFilename'.")
         }
-        else -> println("Неверный ввод.")
+    } else {
+        println("Архив '$zipFilename' не найден.")
     }
 }
 
